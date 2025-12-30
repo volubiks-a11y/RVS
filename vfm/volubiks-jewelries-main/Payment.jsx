@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
+import AdminPayments from './components/AdminPayments';
 
 function loadCart() {
   try {
@@ -69,6 +70,45 @@ export default function Payment() {
       setPaid(true);
       setProcessing(false);
     }, 1000);
+  };
+
+  // Demo helpers to read config saved via AdminPayments
+  const getConfig = () => {
+    try { return JSON.parse(localStorage.getItem('volubiks_payments_config') || 'null'); } catch { return null; }
+  };
+
+  const payWithPaystack = async () => {
+    const cfg = getConfig();
+    if (!cfg || !cfg.paystackWebhook) {
+      alert('Paystack is not configured. See PAYMENT_INTEGRATION.md and add your webhook in the Payment Configuration section on this page.');
+      return;
+    }
+    try {
+      const res = await fetch('/api/paystack/initialize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ summary }) });
+      if (!res.ok) throw new Error('no-backend');
+      const data = await res.json();
+      if (data && data.authorization_url) window.location.href = data.authorization_url;
+      else alert('Unexpected response from backend.');
+    } catch (e) {
+      alert('No server-side Paystack integration detected. See PAYMENT_INTEGRATION.md for setup steps.');
+    }
+  };
+
+  const payWithOpay = async () => {
+    const cfg = getConfig();
+    if (!cfg || !cfg.opayMerchant) {
+      alert('Opay is not configured. Enter your Opay merchant ID/phone in the Payment Configuration section on this page.');
+      return;
+    }
+    try {
+      const res = await fetch('/api/opay/initialize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ summary, merchant: cfg.opayMerchant }) });
+      if (!res.ok) throw new Error('no-backend');
+      const data = await res.json();
+      if (data && data.redirect) window.location.href = data.redirect;
+      else alert('Unexpected response from backend.');
+    } catch (e) {
+      alert('No server-side Opay integration detected. See PAYMENT_INTEGRATION.md for setup steps.');
+    }
   };
 
   if (paid) {
@@ -153,21 +193,25 @@ export default function Payment() {
 
           <div style={{ marginTop: 18 }}>
             <h4>Payment method</h4>
-            <p className="muted">This demo uses a simulated payment flow. To integrate a real provider (Stripe/PayPal) replace the onPay handler with provider integration.</p>
+            <p className="muted">This demo uses a simulated payment flow. To integrate real providers replace the handlers with server-side integration. Use the configuration panel below to paste Paystack webhook secret and Opay merchant (demo only).</p>
 
             <div style={{ marginTop: 10 }}>
-              <button className="button" onClick={async () => {
-                try {
-                  const res = await fetch('/api/create-checkout-session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ summary }) });
-                  if (!res.ok) throw new Error('no-backend');
-                  const data = await res.json();
-                  if (data && data.url) window.location.href = data.url;
-                  else alert('Unexpected response from backend.');
-                } catch (e) {
-                  // graceful fallback
-                  alert('Stripe integration is not configured in this demo. See PAYMENT_INTEGRATION.md in the repo for setup steps.');
-                }
-              }}>Pay with Stripe (test)</button>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button className="button" onClick={async () => {
+                  try {
+                    const res = await fetch('/api/create-checkout-session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ summary }) });
+                    if (!res.ok) throw new Error('no-backend');
+                    const data = await res.json();
+                    if (data && data.url) window.location.href = data.url;
+                    else alert('Unexpected response from backend.');
+                  } catch (e) {
+                    alert('Stripe integration is not configured in this demo. See PAYMENT_INTEGRATION.md in the repo for setup steps.');
+                  }
+                }}>Pay with Stripe (test)</button>
+
+                <button className="button primary" onClick={payWithPaystack}>Pay with Paystack</button>
+                <button className="button primary" onClick={payWithOpay}>Pay with Opay</button>
+              </div>
             </div>
           </div>
         </div>
@@ -177,6 +221,10 @@ export default function Payment() {
             <div className="summary-row"><span>Subtotal</span><strong>₦{summary.subtotal.toFixed(2)}</strong></div>
             <div className="summary-row"><span>VAT (10%)</span><strong>₦{summary.vat.toFixed(2)}</strong></div>
             <div className="summary-total"><span>Total</span><strong>₦{summary.total.toFixed(2)}</strong></div>
+          </div>
+
+          <div style={{ marginTop: 18 }}>
+            <AdminPayments />
           </div>
 
         </div>
